@@ -36,10 +36,10 @@ gateway 示例配置的端口是 `8000`，代码默认值是 `8080`，请以正�
 
 ## Docker 部署
 
-在本项目目录构建镜像：
+镜像沿用 Safactory 的 PJLab 基础镜像，`BASE_IMAGE` 构建参数默认是 `registry.h.pjlab.org.cn/ailab/ml-base:22.04-pjlab-20260323`。在本项目目录构建 Linux/AMD64 镜像：
 
 ```bash
-docker build -t gateway-proxy:latest .
+docker build --platform linux/amd64 -t gateway-proxy:latest .
 ```
 
 将 gateway 的地址替换为容器能够访问的实际 IP 和端口，再启动容器：
@@ -50,19 +50,23 @@ docker run -d --name gateway-proxy \
   -p 9000:9000 \
   -e GATEWAY_IP=192.168.1.10 \
   -e GATEWAY_PORT=8000 \
-  gateway-proxy:latest
+  gateway-proxy:latest python /app/proxy.py
 ```
 
 容器内的 `127.0.0.1` 指向容器自身。gateway 运行在宿主机时，`GATEWAY_IP` 应使用容器可达的宿主机 IP，gateway 也需监听对应网卡地址。如果在 Linux 上使用 `--network host`，可用 `GATEWAY_IP=127.0.0.1` 连接宿主机 gateway，此时省略 `-p`。
 
-默认容器端口为 `9000`。如设置 `PROXY_LISTEN_PORT`，请同步调整 `-p` 的容器端口。镜像以非 root 用户运行。
+默认容器端口为 `9000`。如设置 `PROXY_LISTEN_PORT`，请同步调整 `-p` 的容器端口。
+
+镜像以 root 用户运行，让 PJLab 的 `worker-init` 能初始化 `/usr/bin/ssh-keygen`、`/etc/ssh` 和 `/dev/brainpp` 等系统路径。初始化日志中这些路径的 `permission denied` 与旧镜像的 `USER 10001` 配置吻合；若平台 `securityContext` 仍强制非 root 用户或只读根文件系统，需要同步调整部署配置。
+
+为兼容 PJLab 基础镜像的 Bash profile，镜像将 `/bin/sh` 指向 `/bin/bash`，支持平台执行 login shell。`ENTRYPOINT` 和 `CMD` 都为空，启动命令由 RJob 提供：设置必填环境变量 `GATEWAY_IP`、`GATEWAY_PORT`，然后使用 `python /app/proxy.py`。单独使用 `docker run` 时也必须追加这个完整命令，如上例所示。
 
 ```bash
 docker logs -f gateway-proxy
 docker stop gateway-proxy
 ```
 
-`docker stop` 会通过 `SIGTERM` 停止代理并关闭活动连接。镜像只包含 Python 运行时和代理程序，无需将 Safactory 源码打包进去。
+`docker stop` 会通过 `SIGTERM` 停止代理并关闭活动连接。镜像保留 PJLab 基础运行环境，只添加代理程序，无需将 Safactory 源码打包进去。
 
 ## 请求示例
 
