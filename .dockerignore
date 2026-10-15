@@ -1,0 +1,5 @@
+# Only the proxy program and build definitions belong in the build context.
+*
+!proxy.py
+!Dockerfile
+!.dockerignore
